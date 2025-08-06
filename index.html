@@ -1,0 +1,2416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attica Employee Attendance System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * { font-family: 'Inter', sans-serif; }
+        
+        /* Mobile-first responsive design */
+        .mobile-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .touch-target { min-height: 48px; min-width: 48px; }
+        .mobile-input { font-size: 16px !important; }
+        
+        /* Animations */
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        
+        /* Custom scrollbar */
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+        
+        /* Status indicators */
+        .status-present { background: #10b981; }
+        .status-absent { background: #ef4444; }
+        .status-late { background: #f59e0b; }
+        .status-pending { background: #6b7280; }
+        
+        /* Card shadows */
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .card-shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        
+        /* Gradient backgrounds */
+        .gradient-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .gradient-success { background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); }
+        .gradient-warning { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
+        .gradient-danger { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); }
+        
+        /* Photo preview */
+        .photo-preview { aspect-ratio: 1; object-fit: cover; }
+        
+        /* Modal animations */
+        .modal-enter { animation: modalEnter 0.3s ease-out; }
+        @keyframes modalEnter {
+            from { opacity: 0; transform: scale(0.95) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        
+        /* Mobile bottom sheet */
+        @media (max-width: 640px) {
+            .mobile-modal {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                border-radius: 1rem 1rem 0 0;
+                max-height: 90vh;
+                transform: translateY(100%);
+                transition: transform 0.3s ease-out;
+            }
+            .mobile-modal.show {
+                transform: translateY(0);
+            }
+        }
+        
+        /* Attendance marking buttons */
+        .attendance-btn {
+            transition: all 0.3s ease;
+            transform: scale(1);
+        }
+        .attendance-btn:active {
+            transform: scale(0.95);
+        }
+        .attendance-btn.marked {
+            animation: markSuccess 0.5s ease-out;
+        }
+        @keyframes markSuccess {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        /* Department colors */
+        .dept-sales { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .dept-cf { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .dept-office { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        
+        /* AI Ready indicators */
+        .ai-ready { position: relative; }
+        .ai-ready::after {
+            content: '🤖';
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            font-size: 12px;
+            background: white;
+            border-radius: 50%;
+            padding: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-primary text-white sticky top-0 z-50 card-shadow">
+        <div class="px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold">Attica Attendance</h1>
+                        <p class="text-xs text-white/80 ai-ready">AI-Ready System</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="text-right hidden sm:block">
+                        <div class="text-sm font-semibold" id="currentTime"></div>
+                        <div class="text-xs text-white/80" id="currentDate"></div>
+                    </div>
+                    <select id="roleSelector" class="bg-white/20 backdrop-blur border border-white/30 rounded-lg px-3 py-2 text-sm text-white touch-target">
+                        <option value="admin" class="text-gray-900">🔑 Admin</option>
+                        <option value="manager" class="text-gray-900">👨‍💼 Manager</option>
+                        <option value="employee" class="text-gray-900">👤 Employee</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="px-4 py-6 pb-20 mobile-safe">
+        
+        <!-- Admin Panel -->
+        <div id="adminPanel" class="space-y-6 fade-in">
+            <!-- Dashboard Stats -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white rounded-xl p-4 card-shadow text-center">
+                    <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                        <svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+                        </svg>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900" id="totalEmployees">47</div>
+                    <div class="text-sm text-gray-600">Total Employees</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 card-shadow text-center">
+                    <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                        <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900" id="presentToday">42</div>
+                    <div class="text-sm text-gray-600">Present Today</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 card-shadow text-center">
+                    <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                        <svg class="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"/>
+                        </svg>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900" id="absentToday">5</div>
+                    <div class="text-sm text-gray-600">Absent Today</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 card-shadow text-center">
+                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                        <svg class="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
+                        </svg>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-900">89%</div>
+                    <div class="text-sm text-gray-600">Attendance Rate</div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <button onclick="showEmployeeForm()" class="gradient-primary text-white rounded-2xl p-6 text-left card-shadow-lg touch-target group">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">➕ Add Employee</h3>
+                            <p class="text-white/80 text-sm">Register new team member</p>
+                        </div>
+                        <svg class="w-8 h-8 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z"/>
+                        </svg>
+                    </div>
+                </button>
+                <button onclick="showBulkAttendance()" class="gradient-success text-white rounded-2xl p-6 text-left card-shadow-lg touch-target group">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">✅ Mark Attendance</h3>
+                            <p class="text-white/80 text-sm">Bulk attendance marking</p>
+                        </div>
+                        <svg class="w-8 h-8 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                </button>
+                <button onclick="showExportModal()" class="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-6 text-left card-shadow touch-target group hover:border-green-400">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2 text-gray-900">📊 Export Excel</h3>
+                            <p class="text-gray-600 text-sm">Download attendance reports</p>
+                        </div>
+                        <svg class="w-8 h-8 text-gray-400 group-hover:text-green-500 transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Employee Management Table -->
+            <div class="bg-white rounded-2xl card-shadow overflow-hidden">
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+                        <h3 class="text-lg font-semibold text-gray-900">👥 Employee Management</h3>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                            <input type="text" id="departmentFilter" placeholder="Filter by department..." class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mobile-input">
+                            <input type="text" id="searchEmployee" placeholder="Search employees..." class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mobile-input">
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Attendance %</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeeTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Employee rows will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Attendance Trend Chart -->
+            <div class="bg-white rounded-2xl p-6 card-shadow">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">📈 Attendance Trend (Last 7 Days)</h3>
+                <canvas id="attendanceChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Manager Panel -->
+        <div id="managerPanel" class="space-y-6 fade-in hidden">
+            <div class="bg-white rounded-2xl p-6 card-shadow">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 mb-2">👨‍💼 Manager Dashboard</h2>
+                        <p class="text-gray-600">Mark attendance for your team members</p>
+                    </div>
+                    <button onclick="showExportModal()" class="gradient-success text-white py-3 px-6 rounded-xl font-semibold hover:shadow-lg transition-all duration-200 flex items-center justify-center touch-target">
+                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                        📊 Export Reports
+                    </button>
+                </div>
+            </div>
+
+            <!-- Team Attendance -->
+            <div class="bg-white rounded-2xl card-shadow overflow-hidden">
+                <div class="p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">✅ Team Attendance - <span id="attendanceDate"></span></h3>
+                </div>
+                <div id="teamAttendanceList" class="divide-y divide-gray-200">
+                    <!-- Team members will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Employee Panel -->
+        <div id="employeePanel" class="space-y-6 fade-in hidden">
+            <!-- Personal Attendance Card -->
+            <div class="bg-white rounded-2xl p-6 card-shadow">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900">👤 My Attendance</h2>
+                        <p class="text-gray-600">Track your daily attendance</p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-2xl font-bold text-blue-600">89%</div>
+                        <div class="text-sm text-gray-500">This Month</div>
+                    </div>
+                </div>
+
+                <!-- Today's Attendance -->
+                <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">📅 Today's Status</h3>
+                        <div class="text-sm text-gray-600" id="todayDate"></div>
+                    </div>
+                    
+                    <div id="attendanceStatus" class="space-y-4">
+                        <!-- Attendance marking buttons will appear here -->
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div class="text-center p-4 bg-green-50 rounded-xl">
+                        <div class="text-2xl font-bold text-green-600">23</div>
+                        <div class="text-sm text-green-700">Present Days</div>
+                    </div>
+                    <div class="text-center p-4 bg-red-50 rounded-xl">
+                        <div class="text-2xl font-bold text-red-600">3</div>
+                        <div class="text-sm text-red-700">Absent Days</div>
+                    </div>
+                    <div class="text-center p-4 bg-orange-50 rounded-xl">
+                        <div class="text-2xl font-bold text-orange-600">2</div>
+                        <div class="text-sm text-orange-700">Late Arrivals</div>
+                    </div>
+                    <div class="text-center p-4 bg-blue-50 rounded-xl">
+                        <div class="text-2xl font-bold text-blue-600">8.5</div>
+                        <div class="text-sm text-blue-700">Avg Hours</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance History -->
+            <div class="bg-white rounded-2xl card-shadow overflow-hidden">
+                <div class="p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">📋 Attendance History</h3>
+                </div>
+                <div id="attendanceHistory" class="divide-y divide-gray-200 max-h-96 overflow-y-auto custom-scroll">
+                    <!-- History will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Employee Form Modal -->
+    <div id="employeeModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden">
+        <div class="min-h-screen flex items-end sm:items-center justify-center p-4">
+            <div class="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl mobile-modal modal-enter max-h-[90vh] overflow-y-auto custom-scroll">
+                <div class="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-3xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900">➕ Add New Employee</h2>
+                            <p class="text-gray-600 text-sm">Fill in employee details</p>
+                        </div>
+                        <button onclick="hideEmployeeForm()" class="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <form id="employeeForm" class="p-6 space-y-6">
+                    <!-- Basic Information -->
+                    <div class="bg-blue-50 rounded-2xl p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">👤 Basic Information</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                                <input type="text" id="employeeName" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" placeholder="Enter full name">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
+                                <input type="tel" id="employeePhone" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" placeholder="Enter phone number">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                                <input type="email" id="employeeEmail" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" placeholder="Enter email address">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Employee ID</label>
+                                <input type="text" id="employeeId" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" placeholder="Auto-generated" readonly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Work Information -->
+                    <div class="bg-green-50 rounded-2xl p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">💼 Work Information</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Department *</label>
+                                <input type="text" id="employeeDepartment" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" placeholder="e.g., Sales, Marketing, HR, IT, Finance">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Role/Position *</label>
+                                <input type="text" id="employeeRole" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" placeholder="e.g., Sales Executive">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Work Location *</label>
+                                <input type="text" id="employeeLocation" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" placeholder="Work location/zone">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Joining Date *</label>
+                                <input type="date" id="employeeJoiningDate" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Work Start Time *</label>
+                                <input type="time" id="employeeStartTime" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" value="09:00">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Work End Time *</label>
+                                <input type="time" id="employeeEndTime" required class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input" value="18:00">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Photo Upload -->
+                    <div class="bg-purple-50 rounded-2xl p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">📸 Profile Photo (Optional)</h3>
+                        <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6">
+                            <div class="w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl flex items-center justify-center">
+                                <svg class="w-12 h-12 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <div class="flex-1">
+                                <input type="file" id="employeePhoto" accept="image/*" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-2">Upload a clear photo for face recognition (AI-ready)</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Integration Settings -->
+                    <div class="bg-orange-50 rounded-2xl p-4 ai-ready">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">🤖 AI Integration Settings</h3>
+                        <div class="space-y-3">
+                            <label class="flex items-center p-3 bg-white rounded-lg">
+                                <input type="checkbox" id="enableFaceRecognition" class="mr-3 w-4 h-4 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium">Enable Face Recognition</span>
+                                    <p class="text-xs text-gray-500">For future AI-powered attendance</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 bg-white rounded-lg">
+                                <input type="checkbox" id="enableLocationTracking" class="mr-3 w-4 h-4 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium">Enable Location Tracking</span>
+                                    <p class="text-xs text-gray-500">For GPS-based attendance verification</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 bg-white rounded-lg">
+                                <input type="checkbox" id="enablePredictiveAnalytics" class="mr-3 w-4 h-4 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium">Predictive Analytics</span>
+                                    <p class="text-xs text-gray-500">AI-powered attendance predictions</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 pt-4">
+                        <button type="submit" class="flex-1 gradient-primary text-white py-4 px-6 rounded-2xl font-semibold hover:shadow-lg transition-all duration-200 flex items-center justify-center touch-target">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z"/>
+                            </svg>
+                            Add Employee
+                        </button>
+                        <button type="button" onclick="hideEmployeeForm()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 py-4 px-6 rounded-2xl font-semibold transition-all duration-200 touch-target">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Attendance Modal -->
+    <div id="bulkAttendanceModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden">
+        <div class="min-h-screen flex items-end sm:items-center justify-center p-4">
+            <div class="bg-white w-full max-w-4xl rounded-t-3xl sm:rounded-3xl mobile-modal modal-enter max-h-[90vh] overflow-y-auto custom-scroll">
+                <div class="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-3xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900">✅ Mark Attendance</h2>
+                            <p class="text-gray-600 text-sm">Mark attendance for all employees</p>
+                        </div>
+                        <button onclick="hideBulkAttendance()" class="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="p-6">
+                    <div class="mb-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+                        <button onclick="markAllPresent()" class="gradient-success text-white py-3 px-6 rounded-xl font-semibold hover:shadow-lg transition-all duration-200 touch-target">
+                            ✅ Mark All Present
+                        </button>
+                        <button onclick="markAllAbsent()" class="gradient-danger text-white py-3 px-6 rounded-xl font-semibold hover:shadow-lg transition-all duration-200 touch-target">
+                            ❌ Mark All Absent
+                        </button>
+                        <button onclick="resetAttendance()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 px-6 rounded-xl font-semibold transition-all duration-200 touch-target">
+                            🔄 Reset All
+                        </button>
+                    </div>
+                    
+                    <div id="bulkAttendanceList" class="space-y-3">
+                        <!-- Bulk attendance list will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Excel Modal -->
+    <div id="exportModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden">
+        <div class="min-h-screen flex items-end sm:items-center justify-center p-4">
+            <div class="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl mobile-modal modal-enter max-h-[90vh] overflow-y-auto custom-scroll">
+                <div class="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-3xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900">📊 Export Attendance Report</h2>
+                            <p class="text-gray-600 text-sm">Download attendance data in Excel format</p>
+                        </div>
+                        <button onclick="hideExportModal()" class="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors">
+                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="p-6 space-y-6">
+                    <!-- Export Options -->
+                    <div class="bg-blue-50 rounded-2xl p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">📅 Select Date Range</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">From Date</label>
+                                <input type="date" id="exportFromDate" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">To Date</label>
+                                <input type="date" id="exportToDate" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input">
+                            </div>
+                        </div>
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <button onclick="setDateRange('today')" class="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors">Today</button>
+                            <button onclick="setDateRange('week')" class="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors">This Week</button>
+                            <button onclick="setDateRange('month')" class="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors">This Month</button>
+                            <button onclick="setDateRange('lastMonth')" class="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors">Last Month</button>
+                        </div>
+                    </div>
+
+                    <!-- Department Filter -->
+                    <div class="bg-green-50 rounded-2xl p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">🏢 Department Filter</h3>
+                        <div class="space-y-3">
+                            <label class="flex items-center p-3 bg-white rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="checkbox" id="exportAllDepts" checked class="mr-3 w-4 h-4 text-blue-600" onchange="toggleAllDepartments()">
+                                <span class="text-sm font-medium">All Departments</span>
+                            </label>
+                            <label class="flex items-center p-3 bg-white rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="checkbox" id="exportSales" checked class="mr-3 w-4 h-4 text-blue-600">
+                                <span class="text-sm font-medium">🎯 Sales Team</span>
+                            </label>
+                            <label class="flex items-center p-3 bg-white rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="checkbox" id="exportCF" checked class="mr-3 w-4 h-4 text-blue-600">
+                                <span class="text-sm font-medium">🚚 C&F Team</span>
+                            </label>
+                            <label class="flex items-center p-3 bg-white rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="checkbox" id="exportOffice" checked class="mr-3 w-4 h-4 text-blue-600">
+                                <span class="text-sm font-medium">🏢 Office Team</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Export Format Options -->
+                    <div class="bg-purple-50 rounded-2xl p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">📋 Report Format</h3>
+                        <div class="space-y-3">
+                            <label class="flex items-center p-3 bg-white rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="exportFormat" value="detailed" checked class="mr-3 w-4 h-4 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium">📊 Detailed Report</span>
+                                    <p class="text-xs text-gray-500">Daily attendance with check-in/out times</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 bg-white rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="exportFormat" value="summary" class="mr-3 w-4 h-4 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium">📈 Summary Report</span>
+                                    <p class="text-xs text-gray-500">Monthly attendance percentage summary</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 bg-white rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="exportFormat" value="payroll" class="mr-3 w-4 h-4 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium">💰 Payroll Format</span>
+                                    <p class="text-xs text-gray-500">Working days and hours for payroll</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Preview Section -->
+                    <div class="bg-gray-50 rounded-2xl p-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">👀 Export Preview</h3>
+                        <div id="exportPreview" class="bg-white rounded-lg p-4 border border-gray-200 max-h-64 overflow-y-auto custom-scroll">
+                            <div class="text-center text-gray-500 py-8">
+                                <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                </svg>
+                                <p>Select date range to preview data</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-sm text-gray-600 flex items-center justify-between">
+                            <span id="previewCount">0 records found</span>
+                            <button onclick="generatePreview()" class="text-blue-600 hover:text-blue-800 font-medium">🔄 Refresh Preview</button>
+                        </div>
+                    </div>
+
+                    <!-- Export Actions -->
+                    <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 pt-4">
+                        <button onclick="exportToExcel()" class="flex-1 gradient-success text-white py-4 px-6 rounded-2xl font-semibold hover:shadow-lg transition-all duration-200 flex items-center justify-center touch-target">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                            📊 Download Excel
+                        </button>
+                        <button onclick="exportToCSV()" class="bg-blue-500 hover:bg-blue-600 text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center touch-target">
+                            <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                            📄 Download CSV
+                        </button>
+                        <button type="button" onclick="hideExportModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 py-4 px-6 rounded-2xl font-semibold transition-all duration-200 touch-target">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="fixed top-20 right-4 z-50 space-y-2"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-2xl p-6 text-center">
+            <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full spin mx-auto mb-4"></div>
+            <p class="text-gray-700 font-medium">Processing...</p>
+        </div>
+    </div>
+
+    <script>
+        // Application State
+        let currentUser = { name: 'Admin User', role: 'admin' };
+        let employees = [
+            {
+                id: 'EMP001',
+                name: 'Rajesh Kumar',
+                phone: '9876543210',
+                email: 'rajesh@attica.com',
+                department: 'Sales',
+                role: 'Sales Executive',
+                location: 'South Zone',
+                joiningDate: '2023-01-15',
+                startTime: '09:00',
+                endTime: '18:00',
+                photo: 'rajesh.jpg',
+                attendanceRate: 87,
+                status: 'Active',
+                todayStatus: 'Present',
+                aiEnabled: true,
+                faceRecognition: true,
+                locationTracking: true,
+                predictiveAnalytics: true
+            },
+            {
+                id: 'EMP002',
+                name: 'Meena Sharma',
+                phone: '9876543211',
+                email: 'meena@attica.com',
+                department: 'HR',
+                role: 'HR Executive',
+                location: 'Head Office',
+                joiningDate: '2023-02-01',
+                startTime: '08:30',
+                endTime: '17:30',
+                photo: 'meena.jpg',
+                attendanceRate: 92,
+                status: 'Active',
+                todayStatus: 'Present',
+                aiEnabled: true,
+                faceRecognition: false,
+                locationTracking: true,
+                predictiveAnalytics: true
+            },
+            {
+                id: 'EMP003',
+                name: 'Suresh Patel',
+                phone: '9876543212',
+                email: 'suresh@attica.com',
+                department: 'C&F',
+                role: 'C&F Executive',
+                location: 'North Zone',
+                joiningDate: '2023-01-20',
+                startTime: '08:00',
+                endTime: '17:00',
+                photo: 'suresh.jpg',
+                attendanceRate: 78,
+                status: 'Active',
+                todayStatus: 'Absent',
+                aiEnabled: true,
+                faceRecognition: true,
+                locationTracking: true,
+                predictiveAnalytics: false
+            },
+            {
+                id: 'EMP004',
+                name: 'Priya Joshi',
+                phone: '9876543213',
+                email: 'priya@attica.com',
+                department: 'Marketing',
+                role: 'Marketing Manager',
+                location: 'Central Zone',
+                joiningDate: '2022-12-10',
+                startTime: '09:30',
+                endTime: '18:30',
+                photo: 'priya.jpg',
+                attendanceRate: 94,
+                status: 'Active',
+                todayStatus: 'Present',
+                aiEnabled: true,
+                faceRecognition: true,
+                locationTracking: true,
+                predictiveAnalytics: true
+            },
+            {
+                id: 'EMP005',
+                name: 'Amit Singh',
+                phone: '9876543214',
+                email: 'amit@attica.com',
+                department: 'Finance',
+                role: 'Accountant',
+                location: 'Head Office',
+                joiningDate: '2023-03-01',
+                startTime: '10:00',
+                endTime: '19:00',
+                photo: 'amit.jpg',
+                attendanceRate: 89,
+                status: 'Active',
+                todayStatus: 'Late',
+                aiEnabled: false,
+                faceRecognition: false,
+                locationTracking: false,
+                predictiveAnalytics: false
+            }
+        ];
+
+        let attendanceRecords = [
+            { employeeId: 'EMP001', date: '2024-01-15', status: 'Present', checkIn: '09:15', checkOut: '18:30', location: 'Office' },
+            { employeeId: 'EMP001', date: '2024-01-14', status: 'Present', checkIn: '09:00', checkOut: '18:15', location: 'Office' },
+            { employeeId: 'EMP001', date: '2024-01-13', status: 'Late', checkIn: '09:45', checkOut: '18:30', location: 'Office' },
+            { employeeId: 'EMP002', date: '2024-01-15', status: 'Present', checkIn: '08:55', checkOut: '17:45', location: 'Office' },
+            { employeeId: 'EMP003', date: '2024-01-15', status: 'Absent', checkIn: '', checkOut: '', location: '' }
+        ];
+
+        // Initialize Application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            
+            // Event Listeners
+            document.getElementById('roleSelector').addEventListener('change', handleRoleChange);
+            document.getElementById('employeeForm').addEventListener('submit', handleEmployeeSubmit);
+            document.getElementById('departmentFilter').addEventListener('input', filterEmployees);
+            document.getElementById('searchEmployee').addEventListener('input', searchEmployees);
+            
+            // Export modal event listeners
+            document.getElementById('exportFromDate').addEventListener('change', generatePreview);
+            document.getElementById('exportToDate').addEventListener('change', generatePreview);
+            document.querySelectorAll('input[name="exportFormat"]').forEach(radio => {
+                radio.addEventListener('change', generatePreview);
+            });
+            document.querySelectorAll('#exportSales, #exportCF, #exportOffice').forEach(checkbox => {
+                checkbox.addEventListener('change', generatePreview);
+            });
+            
+            // Generate employee ID
+            generateEmployeeId();
+            
+            // Close modals on outside click
+            document.addEventListener('click', handleOutsideClick);
+        });
+
+        // Initialize App
+        function initializeApp() {
+            loadEmployees();
+            loadTeamAttendance();
+            loadEmployeeAttendance();
+            initializeChart();
+            updateStats();
+            setTodayDate();
+        }
+
+        // Update Date and Time
+        function updateDateTime() {
+            const now = new Date();
+            const timeElement = document.getElementById('currentTime');
+            const dateElement = document.getElementById('currentDate');
+            
+            if (timeElement) {
+                timeElement.textContent = now.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+            
+            if (dateElement) {
+                dateElement.textContent = now.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+        }
+
+        function setTodayDate() {
+            const today = new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            const elements = ['attendanceDate', 'todayDate'];
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = today;
+            });
+        }
+
+        // Role Management
+        function handleRoleChange(e) {
+            const role = e.target.value;
+            switchRole(role);
+            showToast(`Switched to ${role.charAt(0).toUpperCase() + role.slice(1)} view`, 'info');
+        }
+
+        function switchRole(role) {
+            // Hide all panels
+            document.querySelectorAll('[id$="Panel"]').forEach(panel => {
+                panel.classList.add('hidden');
+            });
+            
+            // Show selected panel
+            const targetPanel = document.getElementById(role + 'Panel');
+            if (targetPanel) {
+                targetPanel.classList.remove('hidden');
+                targetPanel.classList.add('fade-in');
+            }
+        }
+
+        // Employee Management
+        function showEmployeeForm() {
+            const modal = document.getElementById('employeeModal');
+            modal.classList.remove('hidden');
+            generateEmployeeId();
+            
+            // Mobile animation
+            if (window.innerWidth <= 640) {
+                setTimeout(() => {
+                    modal.querySelector('.mobile-modal').classList.add('show');
+                }, 10);
+            }
+        }
+
+        function hideEmployeeForm() {
+            const modal = document.getElementById('employeeModal');
+            
+            if (window.innerWidth <= 640) {
+                modal.querySelector('.mobile-modal').classList.remove('show');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            } else {
+                modal.classList.add('hidden');
+            }
+            
+            // Reset form and editing state
+            const form = document.getElementById('employeeForm');
+            form.reset();
+            form.removeAttribute('data-editing');
+            form.removeAttribute('data-editing-id');
+            
+            // Reset form title and button text
+            document.querySelector('#employeeModal h2').textContent = '➕ Add New Employee';
+            document.querySelector('#employeeModal p').textContent = 'Fill in employee details';
+            document.querySelector('#employeeForm button[type="submit"]').innerHTML = `
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z"/>
+                </svg>
+                Add Employee
+            `;
+            
+            // Reset employee ID field
+            const employeeIdField = document.getElementById('employeeId');
+            employeeIdField.readOnly = false;
+            employeeIdField.classList.remove('bg-gray-100');
+            
+            generateEmployeeId();
+        }
+
+        function generateEmployeeId() {
+            const nextId = 'EMP' + String(employees.length + 1).padStart(3, '0');
+            const element = document.getElementById('employeeId');
+            if (element) element.value = nextId;
+        }
+
+        function handleEmployeeSubmit(e) {
+            e.preventDefault();
+            showLoading();
+            
+            const form = e.target;
+            const isEditing = form.dataset.editing === 'true';
+            const editingId = form.dataset.editingId;
+            
+            const employeeData = {
+                id: document.getElementById('employeeId').value,
+                name: document.getElementById('employeeName').value,
+                phone: document.getElementById('employeePhone').value,
+                email: document.getElementById('employeeEmail').value,
+                department: document.getElementById('employeeDepartment').value,
+                role: document.getElementById('employeeRole').value,
+                location: document.getElementById('employeeLocation').value,
+                joiningDate: document.getElementById('employeeJoiningDate').value,
+                startTime: document.getElementById('employeeStartTime').value,
+                endTime: document.getElementById('employeeEndTime').value,
+                faceRecognition: document.getElementById('enableFaceRecognition').checked,
+                locationTracking: document.getElementById('enableLocationTracking').checked,
+                predictiveAnalytics: document.getElementById('enablePredictiveAnalytics').checked
+            };
+            
+            setTimeout(() => {
+                if (isEditing) {
+                    // Update existing employee
+                    const employeeIndex = employees.findIndex(emp => emp.id === editingId);
+                    if (employeeIndex !== -1) {
+                        // Preserve existing data that shouldn't be changed during edit
+                        const existingEmployee = employees[employeeIndex];
+                        employees[employeeIndex] = {
+                            ...existingEmployee,
+                            ...employeeData,
+                            // Keep photo if no new one is uploaded
+                            photo: document.getElementById('employeePhoto').files[0]?.name || existingEmployee.photo,
+                            // Preserve AI enabled status
+                            aiEnabled: employeeData.faceRecognition || employeeData.locationTracking || employeeData.predictiveAnalytics
+                        };
+                        showToast('✅ Employee updated successfully!', 'success');
+                    }
+                } else {
+                    // Add new employee
+                    const newEmployee = {
+                        ...employeeData,
+                        photo: document.getElementById('employeePhoto').files[0]?.name || 'default.jpg',
+                        attendanceRate: 0,
+                        status: 'Active',
+                        todayStatus: 'Pending',
+                        aiEnabled: employeeData.faceRecognition || employeeData.locationTracking || employeeData.predictiveAnalytics
+                    };
+                    employees.push(newEmployee);
+                    showToast('✅ Employee added successfully!', 'success');
+                }
+                
+                loadEmployees();
+                updateStats();
+                hideLoading();
+                hideEmployeeForm();
+            }, 1500);
+        }
+
+        function loadEmployees() {
+            const tbody = document.getElementById('employeeTableBody');
+            if (!tbody) return;
+            
+            tbody.innerHTML = employees.map(emp => `
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 ${getDepartmentColor(emp.department)} rounded-xl flex items-center justify-center text-white font-bold text-sm mr-4">
+                                ${emp.name.charAt(0)}
+                            </div>
+                            <div>
+                                <div class="text-sm font-medium text-gray-900">${emp.name}</div>
+                                <div class="text-sm text-gray-500">${emp.role}</div>
+                                <div class="text-xs text-gray-400">${emp.id} • ${emp.startTime}-${emp.endTime}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-3 py-1 text-xs font-medium rounded-full ${getDepartmentBadgeColor(emp.department)}">
+                            ${getDepartmentIcon(emp.department)} ${emp.department}
+                        </span>
+                        <div class="text-xs text-gray-500 mt-1">${emp.location}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="text-sm font-medium text-gray-900">${emp.attendanceRate}%</div>
+                            <div class="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: ${emp.attendanceRate}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(emp.todayStatus)}">
+                            ${getStatusIcon(emp.todayStatus)} ${emp.todayStatus}
+                        </span>
+                        ${emp.aiEnabled ? '<div class="text-xs text-purple-600 mt-1">🤖 AI-Ready</div>' : ''}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                        <button onclick="editEmployee('${emp.id}')" class="text-blue-600 hover:text-blue-900 transition-colors">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                            </svg>
+                        </button>
+                        <button onclick="deleteEmployee('${emp.id}')" class="text-red-600 hover:text-red-900 transition-colors">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clip-rule="evenodd"/>
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414L7.586 12l-1.293 1.293a1 1 0 101.414 1.414L9 13.414l1.293 1.293a1 1 0 001.414-1.414L10.414 12l1.293-1.293z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Attendance Management
+        function showBulkAttendance() {
+            const modal = document.getElementById('bulkAttendanceModal');
+            modal.classList.remove('hidden');
+            loadBulkAttendanceList();
+            
+            if (window.innerWidth <= 640) {
+                setTimeout(() => {
+                    modal.querySelector('.mobile-modal').classList.add('show');
+                }, 10);
+            }
+        }
+
+        function hideBulkAttendance() {
+            const modal = document.getElementById('bulkAttendanceModal');
+            
+            if (window.innerWidth <= 640) {
+                modal.querySelector('.mobile-modal').classList.remove('show');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function loadBulkAttendanceList() {
+            const container = document.getElementById('bulkAttendanceList');
+            if (!container) return;
+            
+            container.innerHTML = employees.map(emp => `
+                <div class="bg-white border border-gray-200 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 ${getDepartmentColor(emp.department)} rounded-xl flex items-center justify-center text-white font-bold">
+                                ${emp.name.charAt(0)}
+                            </div>
+                            <div>
+                                <div class="font-medium text-gray-900">${emp.name}</div>
+                                <div class="text-sm text-gray-500">${emp.department} - ${emp.role}</div>
+                            </div>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="showAttendanceForm('${emp.id}', 'Present')" class="attendance-btn px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-all touch-target">
+                                ✅ Present
+                            </button>
+                            <button onclick="showAttendanceForm('${emp.id}', 'Absent')" class="attendance-btn px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-all touch-target">
+                                ❌ Absent
+                            </button>
+                            <button onclick="showAttendanceForm('${emp.id}', 'Late')" class="attendance-btn px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-all touch-target">
+                                ⏰ Late
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Manual Date/Time Form (Initially Hidden) -->
+                    <div id="attendanceForm_${emp.id}" class="hidden bg-gray-50 rounded-lg p-4 border-t border-gray-200">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">📅 Date</label>
+                                <input type="date" id="attendanceDate_${emp.id}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mobile-input" value="${new Date().toISOString().split('T')[0]}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">⏰ Check In Time</label>
+                                <input type="time" id="checkInTime_${emp.id}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mobile-input" value="09:00">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">⏰ Check Out Time</label>
+                                <input type="time" id="checkOutTime_${emp.id}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mobile-input" value="18:00">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">📝 Notes (Optional)</label>
+                            <input type="text" id="attendanceNotes_${emp.id}" placeholder="Add any notes about attendance..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mobile-input">
+                        </div>
+                        
+                        <div class="flex space-x-3">
+                            <button onclick="confirmAttendance('${emp.id}')" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg font-medium transition-all touch-target">
+                                💾 Save Attendance
+                            </button>
+                            <button onclick="cancelAttendanceForm('${emp.id}')" class="bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-lg font-medium transition-all touch-target">
+                                ❌ Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        let currentAttendanceStatus = {};
+
+        function showAttendanceForm(employeeId, status) {
+            // Store the selected status
+            currentAttendanceStatus[employeeId] = status;
+            
+            // Show the form
+            const form = document.getElementById(`attendanceForm_${employeeId}`);
+            if (form) {
+                form.classList.remove('hidden');
+                
+                // Set default times based on status
+                const checkInField = document.getElementById(`checkInTime_${employeeId}`);
+                const checkOutField = document.getElementById(`checkOutTime_${employeeId}`);
+                
+                if (status === 'Present') {
+                    checkInField.value = '09:00';
+                    checkOutField.value = '18:00';
+                } else if (status === 'Late') {
+                    checkInField.value = '09:30';
+                    checkOutField.value = '18:00';
+                } else if (status === 'Absent') {
+                    checkInField.value = '';
+                    checkOutField.value = '';
+                    checkInField.disabled = true;
+                    checkOutField.disabled = true;
+                } else {
+                    checkInField.disabled = false;
+                    checkOutField.disabled = false;
+                }
+                
+                // Scroll to form
+                form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function cancelAttendanceForm(employeeId) {
+            const form = document.getElementById(`attendanceForm_${employeeId}`);
+            if (form) {
+                form.classList.add('hidden');
+                
+                // Reset form fields
+                document.getElementById(`attendanceDate_${employeeId}`).value = new Date().toISOString().split('T')[0];
+                document.getElementById(`checkInTime_${employeeId}`).value = '09:00';
+                document.getElementById(`checkOutTime_${employeeId}`).value = '18:00';
+                document.getElementById(`attendanceNotes_${employeeId}`).value = '';
+                
+                // Re-enable time fields
+                document.getElementById(`checkInTime_${employeeId}`).disabled = false;
+                document.getElementById(`checkOutTime_${employeeId}`).disabled = false;
+                
+                // Clear stored status
+                delete currentAttendanceStatus[employeeId];
+            }
+        }
+
+        function confirmAttendance(employeeId) {
+            const status = currentAttendanceStatus[employeeId];
+            const date = document.getElementById(`attendanceDate_${employeeId}`).value;
+            const checkIn = document.getElementById(`checkInTime_${employeeId}`).value;
+            const checkOut = document.getElementById(`checkOutTime_${employeeId}`).value;
+            const notes = document.getElementById(`attendanceNotes_${employeeId}`).value;
+            
+            if (!date) {
+                showToast('❌ Please select a date', 'error');
+                return;
+            }
+            
+            if (status !== 'Absent' && !checkIn) {
+                showToast('❌ Please enter check-in time', 'error');
+                return;
+            }
+            
+            markAttendanceWithDetails(employeeId, status, date, checkIn, checkOut, notes);
+            cancelAttendanceForm(employeeId);
+        }
+
+        function markAttendanceWithDetails(employeeId, status, date, checkIn, checkOut, notes) {
+            const employee = employees.find(emp => emp.id === employeeId);
+            if (employee) {
+                // Update today's status if marking for today
+                const today = new Date().toISOString().split('T')[0];
+                if (date === today) {
+                    employee.todayStatus = status;
+                }
+                
+                // Add to attendance records
+                const existingRecord = attendanceRecords.find(record => 
+                    record.employeeId === employeeId && record.date === date
+                );
+                
+                const attendanceData = {
+                    employeeId: employeeId,
+                    date: date,
+                    status: status,
+                    checkIn: status === 'Absent' ? '' : checkIn,
+                    checkOut: status === 'Absent' ? '' : checkOut,
+                    location: status === 'Absent' ? '' : 'Office',
+                    notes: notes || '',
+                    markedAt: new Date().toISOString(),
+                    markedBy: currentUser.name
+                };
+                
+                if (existingRecord) {
+                    Object.assign(existingRecord, attendanceData);
+                } else {
+                    attendanceRecords.push(attendanceData);
+                }
+                
+                // Update UI
+                loadEmployees();
+                loadBulkAttendanceList();
+                loadTeamAttendance();
+                updateStats();
+                
+                // Calculate working hours for display
+                let workingHours = 0;
+                if (status !== 'Absent' && checkIn && checkOut) {
+                    const checkInTime = new Date(`2000-01-01T${checkIn}`);
+                    const checkOutTime = new Date(`2000-01-01T${checkOut}`);
+                    workingHours = (checkOutTime - checkInTime) / (1000 * 60 * 60);
+                }
+                
+                const dateFormatted = new Date(date).toLocaleDateString('en-US', { 
+                    weekday: 'short', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+                
+                let message = `✅ ${employee.name} marked as ${status} for ${dateFormatted}`;
+                if (checkIn && status !== 'Absent') {
+                    message += ` (${checkIn} - ${checkOut || 'Ongoing'})`;
+                }
+                if (workingHours > 0) {
+                    message += ` - ${workingHours.toFixed(1)} hours`;
+                }
+                
+                showToast(message, 'success');
+            }
+        }
+
+        function markAttendance(employeeId, status) {
+            // Legacy function for quick marking (used by team attendance)
+            const today = new Date().toISOString().split('T')[0];
+            const defaultCheckIn = status === 'Late' ? '09:30' : '09:00';
+            const defaultCheckOut = '18:00';
+            
+            markAttendanceWithDetails(
+                employeeId, 
+                status, 
+                today, 
+                status === 'Absent' ? '' : defaultCheckIn,
+                status === 'Absent' ? '' : defaultCheckOut,
+                'Quick marked'
+            );
+        }
+
+        function markAllPresent() {
+            const today = new Date().toISOString().split('T')[0];
+            employees.forEach(emp => {
+                markAttendanceWithDetails(emp.id, 'Present', today, '09:00', '18:00', 'Bulk marked as Present');
+            });
+            showToast('✅ All employees marked as Present for today', 'success');
+        }
+
+        function markAllAbsent() {
+            const today = new Date().toISOString().split('T')[0];
+            employees.forEach(emp => {
+                markAttendanceWithDetails(emp.id, 'Absent', today, '', '', 'Bulk marked as Absent');
+            });
+            showToast('❌ All employees marked as Absent for today', 'warning');
+        }
+
+        function resetAttendance() {
+            const today = new Date().toISOString().split('T')[0];
+            
+            // Remove today's attendance records
+            attendanceRecords = attendanceRecords.filter(record => record.date !== today);
+            
+            // Reset today's status
+            employees.forEach(emp => {
+                emp.todayStatus = 'Pending';
+            });
+            
+            loadEmployees();
+            loadBulkAttendanceList();
+            loadTeamAttendance();
+            updateStats();
+            showToast('🔄 Today\'s attendance reset for all employees', 'info');
+        }
+
+        function loadTeamAttendance() {
+            const container = document.getElementById('teamAttendanceList');
+            if (!container) return;
+            
+            container.innerHTML = employees.map(emp => `
+                <div class="p-6 hover:bg-gray-50 transition-colors">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 ${getDepartmentColor(emp.department)} rounded-2xl flex items-center justify-center text-white font-bold text-lg">
+                                ${emp.name.charAt(0)}
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-gray-900">${emp.name}</h4>
+                                <p class="text-sm text-gray-600">${emp.department} - ${emp.role}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(emp.todayStatus)}">
+                                ${getStatusIcon(emp.todayStatus)} ${emp.todayStatus}
+                            </span>
+                            <div class="flex space-x-1">
+                                <button onclick="markAttendance('${emp.id}', 'Present')" class="p-2 bg-green-100 hover:bg-green-200 text-green-600 rounded-lg transition-colors touch-target">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                                <button onclick="markAttendance('${emp.id}', 'Absent')" class="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors touch-target">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function loadEmployeeAttendance() {
+            // Load attendance status for employee panel
+            const statusContainer = document.getElementById('attendanceStatus');
+            if (!statusContainer) return;
+            
+            const currentEmployee = employees[0]; // Assuming first employee for demo
+            const todayStatus = currentEmployee.todayStatus;
+            
+            if (todayStatus === 'Pending') {
+                statusContainer.innerHTML = `
+                    <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+                        <button onclick="markSelfAttendance('Present')" class="flex-1 gradient-success text-white py-4 px-6 rounded-2xl font-semibold hover:shadow-lg transition-all duration-200 flex items-center justify-center touch-target">
+                            <svg class="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Mark Present
+                        </button>
+                        <button onclick="getCurrentLocationForAttendance()" class="bg-blue-500 hover:bg-blue-600 text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center touch-target">
+                            <svg class="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                            </svg>
+                            📍 GPS Check-in
+                        </button>
+                    </div>
+                `;
+            } else {
+                statusContainer.innerHTML = `
+                    <div class="text-center p-6 bg-white rounded-2xl border-2 ${getStatusBorderColor(todayStatus)}">
+                        <div class="text-4xl mb-3">${getStatusIcon(todayStatus)}</div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">Attendance Marked</h3>
+                        <p class="text-gray-600">You are marked as <span class="font-semibold ${getStatusTextColor(todayStatus)}">${todayStatus}</span> for today</p>
+                        <div class="mt-4 text-sm text-gray-500">
+                            Marked at: ${new Date().toLocaleTimeString()}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Load attendance history
+            loadAttendanceHistory();
+        }
+
+        function loadAttendanceHistory() {
+            const container = document.getElementById('attendanceHistory');
+            if (!container) return;
+            
+            const currentEmployeeRecords = attendanceRecords
+                .filter(record => record.employeeId === 'EMP001')
+                .sort((a, b) => new Date(b.date) - new Date(a.date))
+                .slice(0, 10);
+            
+            if (currentEmployeeRecords.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center">
+                        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <p class="text-gray-500 font-medium">No attendance records yet</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = currentEmployeeRecords.map(record => `
+                <div class="p-6 hover:bg-gray-50 transition-colors">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="flex items-center space-x-3 mb-2">
+                                <span class="px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(record.status)}">
+                                    ${getStatusIcon(record.status)} ${record.status}
+                                </span>
+                                <span class="text-sm text-gray-600">${formatDate(record.date)}</span>
+                            </div>
+                            ${record.checkIn ? `
+                                <div class="text-sm text-gray-600 space-x-4">
+                                    <span>⏰ In: ${record.checkIn}</span>
+                                    ${record.checkOut ? `<span>⏰ Out: ${record.checkOut}</span>` : ''}
+                                    ${record.location ? `<span>📍 ${record.location}</span>` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="text-right">
+                            ${record.status === 'Present' ? `
+                                <div class="text-sm font-medium text-green-600">8.5 hrs</div>
+                                <div class="text-xs text-gray-500">Full Day</div>
+                            ` : record.status === 'Late' ? `
+                                <div class="text-sm font-medium text-orange-600">8.0 hrs</div>
+                                <div class="text-xs text-gray-500">Late Entry</div>
+                            ` : `
+                                <div class="text-sm font-medium text-red-600">0 hrs</div>
+                                <div class="text-xs text-gray-500">Absent</div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function markSelfAttendance(status) {
+            markAttendance('EMP001', status);
+            loadEmployeeAttendance();
+        }
+
+        function getCurrentLocationForAttendance() {
+            if (!navigator.geolocation) {
+                showToast('❌ Location services not supported', 'error');
+                return;
+            }
+
+            showLoading();
+            
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    // Simulate location verification
+                    setTimeout(() => {
+                        hideLoading();
+                        markSelfAttendance('Present');
+                        showToast(`✅ Attendance marked with GPS location!`, 'success');
+                    }, 2000);
+                },
+                function(error) {
+                    hideLoading();
+                    showToast('❌ Unable to get location. Please mark manually.', 'error');
+                }
+            );
+        }
+
+        // Utility Functions
+        function getDepartmentColor(department) {
+            const colors = {
+                'Sales': 'dept-sales',
+                'C&F': 'dept-cf',
+                'Office': 'dept-office'
+            };
+            return colors[department] || 'bg-gray-500';
+        }
+
+        function getDepartmentBadgeColor(department) {
+            const colors = {
+                'Sales': 'bg-blue-100 text-blue-800',
+                'C&F': 'bg-purple-100 text-purple-800',
+                'Office': 'bg-cyan-100 text-cyan-800'
+            };
+            return colors[department] || 'bg-gray-100 text-gray-800';
+        }
+
+        function getDepartmentIcon(department) {
+            const icons = {
+                'Sales': '🎯',
+                'C&F': '🚚',
+                'Office': '🏢'
+            };
+            return icons[department] || '👤';
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'Present': 'bg-green-100 text-green-800',
+                'Absent': 'bg-red-100 text-red-800',
+                'Late': 'bg-orange-100 text-orange-800',
+                'Pending': 'bg-gray-100 text-gray-800'
+            };
+            return colors[status] || 'bg-gray-100 text-gray-800';
+        }
+
+        function getStatusIcon(status) {
+            const icons = {
+                'Present': '✅',
+                'Absent': '❌',
+                'Late': '⏰',
+                'Pending': '⏳'
+            };
+            return icons[status] || '❓';
+        }
+
+        function getStatusBorderColor(status) {
+            const colors = {
+                'Present': 'border-green-200',
+                'Absent': 'border-red-200',
+                'Late': 'border-orange-200',
+                'Pending': 'border-gray-200'
+            };
+            return colors[status] || 'border-gray-200';
+        }
+
+        function getStatusTextColor(status) {
+            const colors = {
+                'Present': 'text-green-600',
+                'Absent': 'text-red-600',
+                'Late': 'text-orange-600',
+                'Pending': 'text-gray-600'
+            };
+            return colors[status] || 'text-gray-600';
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffTime = Math.abs(now - date);
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) {
+                return 'Today';
+            } else if (diffDays === 1) {
+                return 'Yesterday';
+            } else if (diffDays < 7) {
+                return `${diffDays} days ago`;
+            } else {
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+        }
+
+        // Search and Filter Functions
+        function filterEmployees() {
+            const department = document.getElementById('departmentFilter').value.toLowerCase();
+            const searchTerm = document.getElementById('searchEmployee').value.toLowerCase();
+            
+            let filteredEmployees = employees;
+            
+            if (department) {
+                filteredEmployees = filteredEmployees.filter(emp => 
+                    emp.department.toLowerCase().includes(department)
+                );
+            }
+            
+            if (searchTerm) {
+                filteredEmployees = filteredEmployees.filter(emp => 
+                    emp.name.toLowerCase().includes(searchTerm) ||
+                    emp.role.toLowerCase().includes(searchTerm) ||
+                    emp.id.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            // Update table with filtered results
+            const tbody = document.getElementById('employeeTableBody');
+            if (tbody) {
+                tbody.innerHTML = filteredEmployees.map(emp => `
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 ${getDepartmentColor(emp.department)} rounded-xl flex items-center justify-center text-white font-bold text-sm mr-4">
+                                    ${emp.name.charAt(0)}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">${emp.name}</div>
+                                    <div class="text-sm text-gray-500">${emp.role}</div>
+                                    <div class="text-xs text-gray-400">${emp.id}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-3 py-1 text-xs font-medium rounded-full ${getDepartmentBadgeColor(emp.department)}">
+                                ${getDepartmentIcon(emp.department)} ${emp.department}
+                            </span>
+                            <div class="text-xs text-gray-500 mt-1">${emp.location}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="text-sm font-medium text-gray-900">${emp.attendanceRate}%</div>
+                                <div class="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-600 h-2 rounded-full" style="width: ${emp.attendanceRate}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(emp.todayStatus)}">
+                                ${getStatusIcon(emp.todayStatus)} ${emp.todayStatus}
+                            </span>
+                            ${emp.aiEnabled ? '<div class="text-xs text-purple-600 mt-1">🤖 AI-Ready</div>' : ''}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                            <button onclick="editEmployee('${emp.id}')" class="text-blue-600 hover:text-blue-900 transition-colors">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                </svg>
+                            </button>
+                            <button onclick="deleteEmployee('${emp.id}')" class="text-red-600 hover:text-red-900 transition-colors">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clip-rule="evenodd"/>
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414L7.586 12l-1.293 1.293a1 1 0 101.414 1.414L9 13.414l1.293 1.293a1 1 0 001.414-1.414L10.414 12l1.293-1.293z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function searchEmployees() {
+            filterEmployees();
+        }
+
+        // CRUD Operations
+        function editEmployee(employeeId) {
+            const employee = employees.find(emp => emp.id === employeeId);
+            if (employee) {
+                // Populate form with existing employee data
+                document.getElementById('employeeId').value = employee.id;
+                document.getElementById('employeeName').value = employee.name;
+                document.getElementById('employeePhone').value = employee.phone;
+                document.getElementById('employeeEmail').value = employee.email || '';
+                document.getElementById('employeeDepartment').value = employee.department;
+                document.getElementById('employeeRole').value = employee.role;
+                document.getElementById('employeeLocation').value = employee.location;
+                document.getElementById('employeeJoiningDate').value = employee.joiningDate;
+                document.getElementById('employeeStartTime').value = employee.startTime;
+                document.getElementById('employeeEndTime').value = employee.endTime;
+                document.getElementById('enableFaceRecognition').checked = employee.faceRecognition || false;
+                document.getElementById('enableLocationTracking').checked = employee.locationTracking || false;
+                document.getElementById('enablePredictiveAnalytics').checked = employee.predictiveAnalytics || false;
+                
+                // Change form title and button text for editing
+                document.querySelector('#employeeModal h2').textContent = '✏️ Edit Employee';
+                document.querySelector('#employeeModal p').textContent = 'Update employee details';
+                document.querySelector('#employeeForm button[type="submit"]').innerHTML = `
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                    </svg>
+                    Update Employee
+                `;
+                
+                // Mark form as editing mode
+                document.getElementById('employeeForm').dataset.editing = 'true';
+                document.getElementById('employeeForm').dataset.editingId = employeeId;
+                
+                // Make employee ID readonly during editing
+                document.getElementById('employeeId').readOnly = true;
+                document.getElementById('employeeId').classList.add('bg-gray-100');
+                
+                showEmployeeForm();
+                showToast(`✏️ Editing ${employee.name}`, 'info');
+            }
+        }
+
+        function deleteEmployee(employeeId) {
+            const employee = employees.find(emp => emp.id === employeeId);
+            if (employee && confirm(`Are you sure you want to delete ${employee.name}?`)) {
+                const index = employees.findIndex(emp => emp.id === employeeId);
+                employees.splice(index, 1);
+                loadEmployees();
+                updateStats();
+                showToast(`🗑️ ${employee.name} deleted successfully`, 'success');
+            }
+        }
+
+        // Statistics Update
+        function updateStats() {
+            const totalEmployees = employees.length;
+            const presentToday = employees.filter(emp => emp.todayStatus === 'Present').length;
+            const absentToday = employees.filter(emp => emp.todayStatus === 'Absent').length;
+            const attendanceRate = totalEmployees > 0 ? Math.round((presentToday / totalEmployees) * 100) : 0;
+            
+            const elements = {
+                'totalEmployees': totalEmployees,
+                'presentToday': presentToday,
+                'absentToday': absentToday
+            };
+            
+            Object.entries(elements).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = value;
+            });
+        }
+
+        // Chart Initialization
+        function initializeChart() {
+            const canvas = document.getElementById('attendanceChart');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [{
+                        label: 'Present',
+                        data: [42, 45, 41, 44, 43, 38, 35],
+                        borderColor: '#10B981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Absent',
+                        data: [5, 2, 6, 3, 4, 9, 12],
+                        borderColor: '#EF4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#F3F4F6'
+                            },
+                            ticks: {
+                                color: '#6B7280'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#6B7280'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Export Modal Functions
+        function showExportModal() {
+            const modal = document.getElementById('exportModal');
+            modal.classList.remove('hidden');
+            
+            // Set default dates (last month)
+            setDateRange('lastMonth');
+            generatePreview();
+            
+            if (window.innerWidth <= 640) {
+                setTimeout(() => {
+                    modal.querySelector('.mobile-modal').classList.add('show');
+                }, 10);
+            }
+        }
+
+        function hideExportModal() {
+            const modal = document.getElementById('exportModal');
+            
+            if (window.innerWidth <= 640) {
+                modal.querySelector('.mobile-modal').classList.remove('show');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function setDateRange(range) {
+            const today = new Date();
+            const fromDate = document.getElementById('exportFromDate');
+            const toDate = document.getElementById('exportToDate');
+            
+            let startDate, endDate;
+            
+            switch(range) {
+                case 'today':
+                    startDate = endDate = today;
+                    break;
+                case 'week':
+                    startDate = new Date(today);
+                    startDate.setDate(today.getDate() - today.getDay());
+                    endDate = new Date(startDate);
+                    endDate.setDate(startDate.getDate() + 6);
+                    break;
+                case 'month':
+                    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                    break;
+                case 'lastMonth':
+                    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                    endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                    break;
+            }
+            
+            fromDate.value = startDate.toISOString().split('T')[0];
+            toDate.value = endDate.toISOString().split('T')[0];
+            
+            generatePreview();
+        }
+
+        function toggleAllDepartments() {
+            const allDepts = document.getElementById('exportAllDepts');
+            const deptCheckboxes = ['exportSales', 'exportCF', 'exportOffice'];
+            
+            deptCheckboxes.forEach(id => {
+                document.getElementById(id).checked = allDepts.checked;
+            });
+            
+            generatePreview();
+        }
+
+        function generatePreview() {
+            const fromDate = document.getElementById('exportFromDate').value;
+            const toDate = document.getElementById('exportToDate').value;
+            
+            if (!fromDate || !toDate) {
+                document.getElementById('exportPreview').innerHTML = `
+                    <div class="text-center text-gray-500 py-8">
+                        <p>Please select both from and to dates</p>
+                    </div>
+                `;
+                document.getElementById('previewCount').textContent = '0 records found';
+                return;
+            }
+            
+            const selectedDepts = getSelectedDepartments();
+            const format = document.querySelector('input[name="exportFormat"]:checked').value;
+            
+            // Generate sample data for the selected period
+            const previewData = generateSampleAttendanceData(fromDate, toDate, selectedDepts);
+            
+            let previewHTML = '';
+            
+            if (format === 'detailed') {
+                previewHTML = generateDetailedPreview(previewData);
+            } else if (format === 'summary') {
+                previewHTML = generateSummaryPreview(previewData);
+            } else if (format === 'payroll') {
+                previewHTML = generatePayrollPreview(previewData);
+            }
+            
+            document.getElementById('exportPreview').innerHTML = previewHTML;
+            document.getElementById('previewCount').textContent = `${previewData.length} records found`;
+        }
+
+        function getSelectedDepartments() {
+            const departments = [];
+            if (document.getElementById('exportSales').checked) departments.push('Sales');
+            if (document.getElementById('exportCF').checked) departments.push('C&F');
+            if (document.getElementById('exportOffice').checked) departments.push('Office');
+            return departments;
+        }
+
+        function generateSampleAttendanceData(fromDate, toDate, departments) {
+            const data = [];
+            const start = new Date(fromDate);
+            const end = new Date(toDate);
+            
+            // Filter employees by selected departments
+            const filteredEmployees = employees.filter(emp => 
+                departments.length === 0 || departments.includes(emp.department)
+            );
+            
+            // Generate data for each day in the range
+            for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+                const dateStr = date.toISOString().split('T')[0];
+                
+                filteredEmployees.forEach(emp => {
+                    // Simulate attendance data
+                    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                    let status = 'Present';
+                    
+                    if (isWeekend) {
+                        status = Math.random() > 0.8 ? 'Present' : 'Absent';
+                    } else {
+                        const rand = Math.random();
+                        if (rand < 0.85) status = 'Present';
+                        else if (rand < 0.95) status = 'Late';
+                        else status = 'Absent';
+                    }
+                    
+                    data.push({
+                        date: dateStr,
+                        employeeId: emp.id,
+                        employeeName: emp.name,
+                        department: emp.department,
+                        role: emp.role,
+                        location: emp.location,
+                        status: status,
+                        checkIn: status === 'Absent' ? '' : (status === 'Late' ? '09:30' : '09:00'),
+                        checkOut: status === 'Absent' ? '' : '18:00',
+                        workingHours: status === 'Absent' ? 0 : (status === 'Late' ? 8.5 : 9),
+                        overtime: Math.random() > 0.7 ? Math.floor(Math.random() * 3) : 0
+                    });
+                });
+            }
+            
+            return data;
+        }
+
+        function generateDetailedPreview(data) {
+            if (data.length === 0) {
+                return '<div class="text-center text-gray-500 py-8"><p>No data found for selected criteria</p></div>';
+            }
+            
+            const sample = data.slice(0, 10); // Show first 10 records
+            
+            return `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Date</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Employee</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Department</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Status</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Check In</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Check Out</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            ${sample.map(record => `
+                                <tr>
+                                    <td class="px-2 py-2">${formatDate(record.date)}</td>
+                                    <td class="px-2 py-2">${record.employeeName}</td>
+                                    <td class="px-2 py-2">${record.department}</td>
+                                    <td class="px-2 py-2">
+                                        <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(record.status)}">
+                                            ${record.status}
+                                        </span>
+                                    </td>
+                                    <td class="px-2 py-2">${record.checkIn}</td>
+                                    <td class="px-2 py-2">${record.checkOut}</td>
+                                    <td class="px-2 py-2">${record.workingHours}h</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    ${data.length > 10 ? `<div class="text-center text-gray-500 mt-4 text-xs">... and ${data.length - 10} more records</div>` : ''}
+                </div>
+            `;
+        }
+
+        function generateSummaryPreview(data) {
+            if (data.length === 0) {
+                return '<div class="text-center text-gray-500 py-8"><p>No data found for selected criteria</p></div>';
+            }
+            
+            // Group by employee
+            const employeeSummary = {};
+            data.forEach(record => {
+                if (!employeeSummary[record.employeeId]) {
+                    employeeSummary[record.employeeId] = {
+                        name: record.employeeName,
+                        department: record.department,
+                        role: record.role,
+                        totalDays: 0,
+                        presentDays: 0,
+                        absentDays: 0,
+                        lateDays: 0,
+                        totalHours: 0
+                    };
+                }
+                
+                const summary = employeeSummary[record.employeeId];
+                summary.totalDays++;
+                summary.totalHours += record.workingHours;
+                
+                if (record.status === 'Present') summary.presentDays++;
+                else if (record.status === 'Absent') summary.absentDays++;
+                else if (record.status === 'Late') summary.lateDays++;
+            });
+            
+            const summaryArray = Object.values(employeeSummary).slice(0, 10);
+            
+            return `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Employee</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Department</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Present</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Absent</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Late</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Attendance %</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Total Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            ${summaryArray.map(summary => {
+                                const attendanceRate = Math.round((summary.presentDays / summary.totalDays) * 100);
+                                return `
+                                    <tr>
+                                        <td class="px-2 py-2">${summary.name}</td>
+                                        <td class="px-2 py-2">${summary.department}</td>
+                                        <td class="px-2 py-2 text-green-600">${summary.presentDays}</td>
+                                        <td class="px-2 py-2 text-red-600">${summary.absentDays}</td>
+                                        <td class="px-2 py-2 text-orange-600">${summary.lateDays}</td>
+                                        <td class="px-2 py-2">
+                                            <div class="flex items-center">
+                                                <span class="text-sm font-medium">${attendanceRate}%</span>
+                                                <div class="ml-2 w-12 bg-gray-200 rounded-full h-2">
+                                                    <div class="bg-blue-600 h-2 rounded-full" style="width: ${attendanceRate}%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-2 py-2">${summary.totalHours.toFixed(1)}h</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function generatePayrollPreview(data) {
+            if (data.length === 0) {
+                return '<div class="text-center text-gray-500 py-8"><p>No data found for selected criteria</p></div>';
+            }
+            
+            // Group by employee for payroll calculation
+            const payrollData = {};
+            data.forEach(record => {
+                if (!payrollData[record.employeeId]) {
+                    payrollData[record.employeeId] = {
+                        name: record.employeeName,
+                        department: record.department,
+                        role: record.role,
+                        workingDays: 0,
+                        totalHours: 0,
+                        overtimeHours: 0,
+                        absentDays: 0,
+                        lateDays: 0
+                    };
+                }
+                
+                const payroll = payrollData[record.employeeId];
+                if (record.status === 'Present' || record.status === 'Late') {
+                    payroll.workingDays++;
+                    payroll.totalHours += record.workingHours;
+                    payroll.overtimeHours += record.overtime;
+                }
+                if (record.status === 'Absent') payroll.absentDays++;
+                if (record.status === 'Late') payroll.lateDays++;
+            });
+            
+            const payrollArray = Object.values(payrollData).slice(0, 10);
+            
+            return `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Employee</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Department</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Working Days</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Total Hours</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Overtime Hours</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Absent Days</th>
+                                <th class="px-2 py-2 text-left font-medium text-gray-700">Late Days</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            ${payrollArray.map(payroll => `
+                                <tr>
+                                    <td class="px-2 py-2">${payroll.name}</td>
+                                    <td class="px-2 py-2">${payroll.department}</td>
+                                    <td class="px-2 py-2 font-medium">${payroll.workingDays}</td>
+                                    <td class="px-2 py-2">${payroll.totalHours.toFixed(1)}h</td>
+                                    <td class="px-2 py-2 text-blue-600">${payroll.overtimeHours.toFixed(1)}h</td>
+                                    <td class="px-2 py-2 text-red-600">${payroll.absentDays}</td>
+                                    <td class="px-2 py-2 text-orange-600">${payroll.lateDays}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function exportToExcel() {
+            const fromDate = document.getElementById('exportFromDate').value;
+            const toDate = document.getElementById('exportToDate').value;
+            
+            if (!fromDate || !toDate) {
+                showToast('❌ Please select date range', 'error');
+                return;
+            }
+            
+            showLoading();
+            
+            setTimeout(() => {
+                const selectedDepts = getSelectedDepartments();
+                const format = document.querySelector('input[name="exportFormat"]:checked').value;
+                const data = generateSampleAttendanceData(fromDate, toDate, selectedDepts);
+                
+                let worksheetData = [];
+                let filename = '';
+                
+                if (format === 'detailed') {
+                    worksheetData = data.map(record => ({
+                        'Date': record.date,
+                        'Employee ID': record.employeeId,
+                        'Employee Name': record.employeeName,
+                        'Department': record.department,
+                        'Role': record.role,
+                        'Location': record.location,
+                        'Status': record.status,
+                        'Check In': record.checkIn,
+                        'Check Out': record.checkOut,
+                        'Working Hours': record.workingHours,
+                        'Overtime Hours': record.overtime
+                    }));
+                    filename = `Detailed_Attendance_${fromDate}_to_${toDate}.xlsx`;
+                } else if (format === 'summary') {
+                    const employeeSummary = {};
+                    data.forEach(record => {
+                        if (!employeeSummary[record.employeeId]) {
+                            employeeSummary[record.employeeId] = {
+                                'Employee ID': record.employeeId,
+                                'Employee Name': record.employeeName,
+                                'Department': record.department,
+                                'Role': record.role,
+                                'Location': record.location,
+                                'Total Days': 0,
+                                'Present Days': 0,
+                                'Absent Days': 0,
+                                'Late Days': 0,
+                                'Total Hours': 0,
+                                'Attendance Percentage': 0
+                            };
+                        }
+                        
+                        const summary = employeeSummary[record.employeeId];
+                        summary['Total Days']++;
+                        summary['Total Hours'] += record.workingHours;
+                        
+                        if (record.status === 'Present') summary['Present Days']++;
+                        else if (record.status === 'Absent') summary['Absent Days']++;
+                        else if (record.status === 'Late') summary['Late Days']++;
+                    });
+                    
+                    worksheetData = Object.values(employeeSummary).map(summary => {
+                        summary['Attendance Percentage'] = Math.round((summary['Present Days'] / summary['Total Days']) * 100);
+                        summary['Total Hours'] = parseFloat(summary['Total Hours'].toFixed(1));
+                        return summary;
+                    });
+                    filename = `Summary_Attendance_${fromDate}_to_${toDate}.xlsx`;
+                } else if (format === 'payroll') {
+                    const payrollData = {};
+                    data.forEach(record => {
+                        if (!payrollData[record.employeeId]) {
+                            payrollData[record.employeeId] = {
+                                'Employee ID': record.employeeId,
+                                'Employee Name': record.employeeName,
+                                'Department': record.department,
+                                'Role': record.role,
+                                'Working Days': 0,
+                                'Total Hours': 0,
+                                'Overtime Hours': 0,
+                                'Absent Days': 0,
+                                'Late Days': 0,
+                                'Gross Hours': 0
+                            };
+                        }
+                        
+                        const payroll = payrollData[record.employeeId];
+                        if (record.status === 'Present' || record.status === 'Late') {
+                            payroll['Working Days']++;
+                            payroll['Total Hours'] += record.workingHours;
+                            payroll['Overtime Hours'] += record.overtime;
+                        }
+                        if (record.status === 'Absent') payroll['Absent Days']++;
+                        if (record.status === 'Late') payroll['Late Days']++;
+                    });
+                    
+                    worksheetData = Object.values(payrollData).map(payroll => {
+                        payroll['Total Hours'] = parseFloat(payroll['Total Hours'].toFixed(1));
+                        payroll['Overtime Hours'] = parseFloat(payroll['Overtime Hours'].toFixed(1));
+                        payroll['Gross Hours'] = payroll['Total Hours'] + payroll['Overtime Hours'];
+                        return payroll;
+                    });
+                    filename = `Payroll_Report_${fromDate}_to_${toDate}.xlsx`;
+                }
+                
+                // Create workbook and worksheet
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(worksheetData);
+                
+                // Auto-size columns
+                const colWidths = [];
+                if (worksheetData.length > 0) {
+                    Object.keys(worksheetData[0]).forEach((key, index) => {
+                        const maxLength = Math.max(
+                            key.length,
+                            ...worksheetData.map(row => String(row[key] || '').length)
+                        );
+                        colWidths[index] = { wch: Math.min(maxLength + 2, 50) };
+                    });
+                }
+                ws['!cols'] = colWidths;
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, 'Attendance Report');
+                
+                // Save file
+                XLSX.writeFile(wb, filename);
+                
+                hideLoading();
+                hideExportModal();
+                showToast(`📊 Excel file downloaded: ${filename}`, 'success');
+            }, 1500);
+        }
+
+        function exportToCSV() {
+            const fromDate = document.getElementById('exportFromDate').value;
+            const toDate = document.getElementById('exportToDate').value;
+            
+            if (!fromDate || !toDate) {
+                showToast('❌ Please select date range', 'error');
+                return;
+            }
+            
+            showLoading();
+            
+            setTimeout(() => {
+                const selectedDepts = getSelectedDepartments();
+                const format = document.querySelector('input[name="exportFormat"]:checked').value;
+                const data = generateSampleAttendanceData(fromDate, toDate, selectedDepts);
+                
+                let csvContent = '';
+                let filename = '';
+                
+                if (format === 'detailed') {
+                    csvContent = 'Date,Employee ID,Employee Name,Department,Role,Location,Status,Check In,Check Out,Working Hours,Overtime Hours\n';
+                    csvContent += data.map(record => 
+                        `${record.date},${record.employeeId},"${record.employeeName}",${record.department},"${record.role}","${record.location}",${record.status},${record.checkIn},${record.checkOut},${record.workingHours},${record.overtime}`
+                    ).join('\n');
+                    filename = `Detailed_Attendance_${fromDate}_to_${toDate}.csv`;
+                } else if (format === 'summary') {
+                    const employeeSummary = {};
+                    data.forEach(record => {
+                        if (!employeeSummary[record.employeeId]) {
+                            employeeSummary[record.employeeId] = {
+                                id: record.employeeId,
+                                name: record.employeeName,
+                                department: record.department,
+                                role: record.role,
+                                location: record.location,
+                                totalDays: 0,
+                                presentDays: 0,
+                                absentDays: 0,
+                                lateDays: 0,
+                                totalHours: 0
+                            };
+                        }
+                        
+                        const summary = employeeSummary[record.employeeId];
+                        summary.totalDays++;
+                        summary.totalHours += record.workingHours;
+                        
+                        if (record.status === 'Present') summary.presentDays++;
+                        else if (record.status === 'Absent') summary.absentDays++;
+                        else if (record.status === 'Late') summary.lateDays++;
+                    });
+                    
+                    csvContent = 'Employee ID,Employee Name,Department,Role,Location,Total Days,Present Days,Absent Days,Late Days,Total Hours,Attendance Percentage\n';
+                    csvContent += Object.values(employeeSummary).map(summary => {
+                        const attendanceRate = Math.round((summary.presentDays / summary.totalDays) * 100);
+                        return `${summary.id},"${summary.name}",${summary.department},"${summary.role}","${summary.location}",${summary.totalDays},${summary.presentDays},${summary.absentDays},${summary.lateDays},${summary.totalHours.toFixed(1)},${attendanceRate}%`;
+                    }).join('\n');
+                    filename = `Summary_Attendance_${fromDate}_to_${toDate}.csv`;
+                }
+                
+                // Download CSV
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                hideLoading();
+                hideExportModal();
+                showToast(`📄 CSV file downloaded: ${filename}`, 'success');
+            }, 1500);
+        }
+
+        // UI Helper Functions
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                warning: 'bg-orange-500',
+                info: 'bg-blue-500'
+            };
+            
+            toast.className = `${colors[type]} text-white px-6 py-4 rounded-2xl shadow-lg transform transition-all duration-300 translate-x-full`;
+            toast.textContent = message;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-x-full');
+            }, 10);
+            
+            // Remove after 4 seconds
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (container.contains(toast)) {
+                        container.removeChild(toast);
+                    }
+                }, 300);
+            }, 4000);
+        }
+
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
+        function handleOutsideClick(e) {
+            if (e.target.id === 'employeeModal') {
+                hideEmployeeForm();
+            }
+            if (e.target.id === 'bulkAttendanceModal') {
+                hideBulkAttendance();
+            }
+            if (e.target.id === 'exportModal') {
+                hideExportModal();
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('load', function() {
+            showToast('🚀 Attica Attendance System loaded successfully!', 'success');
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96ae020235ee1f0a',t:'MTc1NDQ3Nzc5MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
